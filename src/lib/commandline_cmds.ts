@@ -1,6 +1,7 @@
 import { messageOwnTab } from "@src/lib/messaging"
 import * as State from "@src/state"
 import { contentState } from "@src/content/state_content"
+import * as config from "@src/lib/config"
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -162,7 +163,12 @@ export function getCommandlineFns(cmdline_state: {
                 !browser.extension.inIncognitoContext &&
                 !(func === "winopen" && args[0] === "-private")
             ) {
+                const limitChar = config.get("historycommandlengthlimit")
+                if (command.length > limitChar) return
+                const limitUp = config.get("historysizelimitup")
+                const limitDown = config.get("historysizelimitdown")
                 State.getAsync("cmdHistory").then(c => {
+                    if (c.length > limitUp) c = c.slice(-limitDown)
                     cmdline_state.state.cmdHistory = c.concat([command])
                 })
                 cmdline_state.cmdline_history_position = 0

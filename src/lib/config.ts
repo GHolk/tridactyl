@@ -676,6 +676,9 @@ export class default_config {
         prev: "^(prev(ious)?|older)\\b|«|<<",
     }
 
+    historysizelimitup = 1024
+    historysizelimitdown = 512
+    historycommandlengthlimit = 512
     /**
      * The default search engine used by `open search`. If empty string, your browser's default search engine will be used. If set to something, Tridactyl will first look at your [[searchurls]] and then at the search engines for which you have defined a keyword on `about:preferences#search`.
      */

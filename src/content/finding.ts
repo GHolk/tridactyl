@@ -26,37 +26,50 @@ function getFindHost() {
 class FindHighlight extends HTMLSpanElement {
     public top = Infinity
 
-    constructor(private rects, public range: Range) {
+    constructor(public range: Range) {
         super()
         this.style.position = "absolute"
         this.style.top = "0px"
         this.style.left = "0px"
-        for (const rect of rects) {
-            if (rect.top < this.top) {
-                this.top = rect.top
+        this.updateRectsPosition()
+        ;(this as any).unfocus()
+    }
+
+    updateRectsPosition() {
+        const rects = this.getClientRects()
+        this.top = Infinity
+        const windowTop = window.pageYOffset
+        const windowLeft = window.pageXOffset
+        for (let i=0; i<rects.length; i++) {
+            const rect = rects[i]
+            if ((rect.top + windowTop) < this.top) {
+                this.top = rect.top + windowTop
             }
-            const highlight = document.createElement("span")
+            let highlight
+            if (i in this.children) highlight = this.children[i]
+            else {
+                highlight = document.createElement("span")
+                this.appendChild(highlight)
+            }
             highlight.className = "TridactylFindHighlight"
             highlight.style.position = "absolute"
-            highlight.style.top = `${rect.top}px`
-            highlight.style.left = `${rect.left}px`
+            highlight.style.top = `${rect.top + windowTop}px`
+            highlight.style.left = `${rect.left + windowLeft}px`
             highlight.style.width = `${rect.right - rect.left}px`
             highlight.style.height = `${rect.bottom - rect.top}px`
             highlight.style.zIndex = "2147483645"
             highlight.style.pointerEvents = "none"
-            this.appendChild(highlight)
         }
-        ;(this as any).unfocus()
     }
 
-    static fromFindApi(rectData, rangeData, allTextNode: Text[]) {
+    static fromFindApi(found, allTextNode: Text[]) {
         const range = document.createRange()
         range.setStart(
-            allTextNode[rangeData.startTextNodePos],
-            rangeData.startOffset,
+            allTextNode[found.startTextNodePos],
+            found.startOffset,
         )
-        range.setEnd(allTextNode[rangeData.endTextNodePos], rangeData.endOffset)
-        return new this(rectData, range)
+        range.setEnd(allTextNode[found.endTextNodePos], found.endOffset)
+        return new this(range)
     }
 
     getBoundingClientRect() {
@@ -92,7 +105,7 @@ class FindHighlight extends HTMLSpanElement {
         }
 
         for (const node of this.children) {
-            ;(node as HTMLElement).style.background = `rgba(255,127,255,0.5)`
+            node.style.background = `rgba(255,127,255,0.5)`
         }
     }
 }
@@ -152,11 +165,7 @@ export async function jumpToMatch(searchQuery, option) {
             continue
         }
         const range = results.rangeData[i]
-        const high = FindHighlight.fromFindApi(
-            data.rectsAndTexts.rectList,
-            range,
-            nodes,
-        )
+        const high = FindHighlight.fromFindApi(range, nodes)
         host.appendChild(high)
         lastHighlights.push(high)
     }
@@ -170,16 +179,14 @@ export async function jumpToMatch(searchQuery, option) {
     if ("jumpTo" in option) {
         selected =
             (option["jumpTo"] + lastHighlights.length) % lastHighlights.length
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        ;(lastHighlights[selected] as any).focus()
+        focusHighlight(selected)
         return
     }
 
     // Just reuse the code to find the first match in the view
     selected = 0
     if (DOM.isVisible(lastHighlights[selected])) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-        ;(lastHighlights[selected] as any).focus()
+        focusHighlight(selected)
     } else {
         const searchFromView = true
         await jumpToNextMatch(1, searchFromView)
@@ -194,6 +201,13 @@ function drawHighlights(highlights) {
 export function removeHighlighting() {
     const host = getFindHost()
     while (host.firstChild) host.removeChild(host.firstChild)
+}
+
+export function focusHighlight(index) {
+    lastHighlights[index].focus()
+    for (const node of lastHighlights) {
+        node.updateRectsPosition()
+    }
 }
 
 export async function jumpToNextMatch(n: number, searchFromView = false) {
@@ -243,8 +257,7 @@ export async function jumpToNextMatch(n: number, searchFromView = false) {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    ;(lastHighlights[selected] as any).focus()
+    focusHighlight(selected)
 }
 
 export function currentMatchRange(): Range {

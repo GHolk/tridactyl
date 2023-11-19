@@ -13,6 +13,8 @@ const logger = new Logging.Logger("dom")
 
 // From saka-key lib/dom.js, under Apachev2
 
+export let elementTextEditable = ["SELECT", "TEXTAREA", "OBJECT"]
+
 /**
  * Given a DOM element, returns true if you can edit it with key presses or
  * if the element is of a type that should handle its own keypresses
@@ -31,7 +33,7 @@ export function isTextEditable(element: Element) {
         }
 
         if (
-            ["SELECT", "TEXTAREA", "OBJECT"].includes(
+            elementTextEditable.includes(
                 element.nodeName.toUpperCase(),
             )
         ) {

@@ -4,7 +4,7 @@ Hello. If you've just installed Tridactyl for the first time, welcome! Tridactyl
 
 Welcome to the Tridactyl tutorial. Here, you will learn how to get started with this extension. If you ever want to get back to this page, just type `:tutor`.
 
-It will not cover advanced topics. For those, [`:help`](../docs/modules/_src_excmds_.html) is always at hand. You might also find the [unofficial Tridactyl Memrise course](https://app.memrise.com/course/5995499/tridactyls-main-shortcuts/) useful for memorising binds.
+It will not cover advanced topics. For those, [`:help`](../docs/modules/_src_excmds_.html) is always at hand. You might also find the [unofficial Tridactyl Memrise course](https://app.memrise.com/community/course/5995499/tridactyls-main-shortcuts/) (requires login) useful for memorising binds.
 
 ---
 
@@ -35,6 +35,10 @@ The idea behind Tridactyl is to allow you to navigate the web more efficiently w
     -   Tridactyl can be configured to enter ignore mode for specified URLs. Run `:blacklistadd [url]` to put Tridactyl in ignore mode on the provided URL. Use the command `:blacklistremove [url]` to remove the URL from the blacklist.
 
 Almost all of the modes are controlled by series of keypresses. In this tutorial, a sequence of keys such as `zz` should be entered by pressing the key `z`, letting go, and then pressing the key `z`. There is no need to hold both keys at once, if that were even possible. (`zz` resets the zoom level to the default, so it probably didn't seem to do anything). Sometimes `help` refers to a command that must be entered in command mode; it should hopefully always be clear from context which we mean.
+
+### Note for users of other Vim-style browser tools
+
+Tridactyl defaults to using `J` to switch to the previous tab and `K` to switch to the next tab, which may be different from what you're used to if you're coming from Vimperator/Pentadactyl, qutebrowser, or similar projects. You can run `:bind J tabnext` and `:bind K tabprev` to switch the two around if you prefer.
 
 ---
 

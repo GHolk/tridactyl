@@ -47,6 +47,7 @@ export interface HintOptions {
     excmd: null | string
     pipeAttribute: null | string
     selectors: string[]
+    selectorsExclude: string[]
     warnings: string[]
 }
 
@@ -64,6 +65,8 @@ export class HintConfig implements HintOptions {
     public excmd = null
     public pipeAttribute = null
     public selectors = []
+    public selectorsExclude = []
+    public includeDefaultHintables = true
     public warnings = []
 
     public static parse(args: string[]): HintConfig {
@@ -78,10 +81,13 @@ export class HintConfig implements HintOptions {
             ExpectPipeSelector,
             ExpectPipeAttribute,
             ExpectSelectorCallback,
+            ExpectSelectorExclude,
         }
 
         const result = new HintConfig()
         const multiLetterFlags = ["fr", "wp", "br", "pipe"]
+        let cOrPipeFlagPresent = false
+        let CFlagPresent = false
 
         // Parser state
         let state = State.Initial
@@ -148,9 +154,21 @@ export class HintConfig implements HintOptions {
                                     newState = State.ExpectExcmd
                                     break
                                 case "c":
+                                    cOrPipeFlagPresent = true
+                                    result.includeDefaultHintables = false
                                     newState = State.ExpectSelector
                                     break
+                                case "C":
+                                    CFlagPresent = true
+                                    result.includeDefaultHintables = true
+                                    newState = State.ExpectSelector
+                                    break
+                                case "x":
+                                    newState = State.ExpectSelectorExclude
+                                    break
                                 case "pipe":
+                                    cOrPipeFlagPresent = true
+                                    result.includeDefaultHintables = false
                                     newState = State.ExpectPipeSelector
                                     break
                                 case "t":
@@ -232,6 +250,14 @@ export class HintConfig implements HintOptions {
                                 result.openMode = newOpenMode
                             }
 
+                            if (cOrPipeFlagPresent && CFlagPresent) {
+                                result.warnings.push(
+                                    "mutually exclusive -c (or -pipe) and -C flags are both specified, last wins, " +
+                                    "default hints will " +
+                                    (result.includeDefaultHintables ? "be" : "not be") + " included",
+                                )
+                            }
+
                             // Check state changes
                             if (newState !== undefined) {
                                 // Some state transitions are dubious, specifically all the ones that go from (argument
@@ -259,6 +285,7 @@ export class HintConfig implements HintOptions {
                         }
                     } else {
                         // Not something that looks like an argument, add it to positionals for later processing
+                        result.includeDefaultHintables = false
                         result.selectors.push(arg)
                     }
                     break
@@ -302,6 +329,11 @@ export class HintConfig implements HintOptions {
                 case State.ExpectSelector:
                     // -c, expect a single selector
                     result.selectors.push(arg)
+                    state = State.Initial
+                    break
+                case State.ExpectSelectorExclude:
+                    // -x, expect a single exclude selector
+                    result.selectorsExclude.push(arg)
                     state = State.Initial
                     break
                 case State.ExpectPipeSelector:
@@ -391,21 +423,26 @@ export class HintConfig implements HintOptions {
     }
 
     public hintables() {
-        // User selectors always override default built-ins
-        const hintables =
-            this.selectors.length > 0
-                ? hinting.hintables(
-                      this.selectors.join(" "),
-                      this.jshints,
-                      this.includeInvisible,
-                  )
-                : this.defaultHintables()
-
-        // Do we have text filters to refine this?
-        if (this.textFilter !== null) {
-            for (const elements of hintables) {
+        let hintables = this.includeDefaultHintables ? this.defaultHintables() : []
+        if (this.selectors.length > 0) {
+            hintables = hintables.concat(hinting.hintables(
+                this.selectors.join(" "),
+                this.jshints,
+                this.includeInvisible,
+            ))
+        }
+        const textFilter = this.textFilter
+        const exclude = this.selectorsExclude.join(" ")
+        for (const elements of hintables) {
+            // Do we have text filters to refine this?
+            if (textFilter !== null) {
                 elements.elements = elements.elements.filter(
                     hinting.hintByTextFilter(this.textFilter),
+                )
+            }
+            if (exclude) {
+                elements.elements = elements.elements.filter(
+                    element => !element.matches(exclude)
                 )
             }
         }

@@ -74,7 +74,7 @@
 
 // Shared
 import * as Messaging from "@src/lib/messaging"
-import { ownWinTriIndex, getTriVersion, browserBg, activeTab, activeTabId, activeTabContainerId, openInNewTab, openInNewWindow, openInTab, queryAndURLwrangler, goToTab } from "@src/lib/webext"
+import { ownWinTriIndex, getTriVersion, browserBg, activeTab, activeTabId, activeTabContainerId, openInNewTab, openInNewWindow, openInTab, queryAndURLwrangler, goToTab, getSortedTabs, prevActiveTab } from "@src/lib/webext"
 import * as Container from "@src/lib/containers"
 import state from "@src/state"
 import * as State from "@src/state"
@@ -170,7 +170,7 @@ import * as Updates from "@src/lib/updates"
 import * as Extensions from "@src/lib/extension_info"
 import * as webrequests from "@src/background/webrequests"
 import * as commandsHelper from "@src/background/commands"
-import { tgroups, tgroupActivate, setTabTgroup, setWindowTgroup, setTgroups, windowTgroup, tgroupClearOldInfo, tgroupLastTabId, tgroupTabs, clearAllTgroupInfo, tgroupActivateLast, tgroupHandleTabActivated, tgroupHandleTabCreated, tgroupHandleTabAttached, tgroupHandleTabUpdated, tgroupHandleTabRemoved, tgroupHandleTabDetached } from "./lib/tab_groups"
+import { tgroups, tgroupActivate, setTabTgroup, setWindowTgroup, setTgroups, windowTgroup, windowLastTgroup, tgroupClearOldInfo, tgroupLastTabId, tgroupTabs, clearAllTgroupInfo, tgroupActivateLast, tgroupHandleTabActivated, tgroupHandleTabCreated, tgroupHandleTabAttached, tgroupHandleTabUpdated, tgroupHandleTabRemoved, tgroupHandleTabDetached } from "./lib/tab_groups"
 
 ALL_EXCMDS = {
     "": BGSELF,
@@ -722,7 +722,7 @@ export async function exclaim_quiet(...str: string[]) {
 /**
  * Tells you if the native messenger is installed and its version.
  *
- * For snap, flatpak, and other sandboxed installations, additional setup is required – see https://github.com/tridactyl#extra-features-through-native-messaging.
+ * For snap, flatpak, and other sandboxed installations, additional setup is required – see https://github.com/tridactyl/tridactyl#extra-features-through-native-messaging.
  */
 //#background
 export async function native() {
@@ -743,7 +743,7 @@ export async function native() {
  *
  * If your corporate IT policy disallows execution of binaries which have not been whitelisted but allows Python scripts, you may instead use the old native messenger by running `install.sh` or `win_install.ps1` from https://github.com/tridactyl/tridactyl/tree/master/native - the main downside is that it is significantly slower.
  *
- * For snap, flatpak, and other sandboxed installations, additional setup is required – see https://github.com/tridactyl#extra-features-through-native-messaging.
+ * For snap, flatpak, and other sandboxed installations, additional setup is required – see https://github.com/tridactyl/tridactyl#extra-features-through-native-messaging.
  */
 //#background
 export async function nativeinstall() {
@@ -818,15 +818,19 @@ export async function mktridactylrc(...args: string[]) {
 /**
  * Runs an RC file from disk or a URL
  *
- * This function accepts a flag: `--url` to load a RC from a URL.
+ * This function accepts flags: `--url`, `--clipboard` or `--strings`.
  *
  * If no argument given, it will try to open ~/.tridactylrc, ~/.config/tridactyl/tridactylrc or $XDG_CONFIG_HOME/tridactyl/tridactylrc in reverse order. You may use a `_` in place of a leading `.` if you wish, e.g, if you use Windows.
  *
- * If no url is specified with the `--url` flag, the current page's URL is used to locate the RC file. Ensure the URL you pass (or page you are on) is a "raw" RC file, e.g. https://raw.githubusercontent.com/tridactyl/tridactyl/master/.tridactylrc and not https://github.com/tridactyl/tridactyl/blob/master/.tridactylrc.
+ * On Windows, the `~` expands to `%USERPROFILE%`.
+ *
+ * The `--url` flag will load the RC from the URL. If no url is specified with the `--url` flag, the current page's URL is used to locate the RC file. Ensure the URL you pass (or page you are on) is a "raw" RC file, e.g. https://raw.githubusercontent.com/tridactyl/tridactyl/master/.tridactylrc and not https://github.com/tridactyl/tridactyl/blob/master/.tridactylrc.
  *
  * Tridactyl won't run on many raw pages due to a Firefox bug with Content Security Policy, so you may need to use the `source --url [URL]` form.
  *
- * On Windows, the `~` expands to `%USERPROFILE%`.
+ * The `--clipboard` flag will load the RC from the clipboard, which is useful for people cannot install the native messenger or do not wish to store their RC online. You can use this with `mktridactylrc --clipboard`.
+ *
+ * The `--strings` flag will load the RC from rest arguments. It could be useful if you want to execute a batch of commands in js context. Eg: `js tri.excmds.source("--strings", [cmd1, cmd2].join("\n"))`.
  *
  * The RC file is just a bunch of Tridactyl excmds (i.e, the stuff on this help page). Settings persist in local storage. There's an [example file](https://raw.githubusercontent.com/tridactyl/tridactyl/master/.tridactylrc) if you want it.
  *
@@ -841,6 +845,11 @@ export async function source(...args: string[]) {
         if (!url || url === "%") url = window.location.href
         if (!new RegExp("^(https?://)|data:").test(url)) url = "http://" + url
         await rc.sourceFromUrl(url)
+    } else if (args[0] === "--strings") {
+        await rc.runRc(args.slice(1).join(" "))
+    } else if (args[0] === "--clipboard") {
+        const text = await getclip()
+        await rc.runRc(text)
     } else {
         const file = args.join(" ") || undefined
         if ((await Native.nativegate("0.1.3")) && !(await rc.source(file))) {
@@ -2065,9 +2074,18 @@ export function urlroot() {
  */
 //#content
 export function urlparent(count = 1) {
-    const trailingSlash = config.get("urlparenttrailingslash") === "true"
+    const option = {}
+    for (const key of "trailingSlash ignoreFragment ignoreSearch".split(" ")) {
+        const configKey = ("urlparent" + key.toLowerCase()) as keyof config.default_config
+        option[key] = config.get(configKey) === "true"
+    }
+    const regexpString = config.get("urlparentignorepathregexp")
+    const regexpScan = regexpString.match(/^\/(.+)\/([a-z]*?)$/)
+    if (regexpString && regexpScan) {
+        option["ignorePathRegExp"] = new RegExp(regexpScan[1], regexpScan[2])
+    }
 
-    const parentUrl = UrlUtil.getUrlParent(window.location, trailingSlash, count)
+    const parentUrl = UrlUtil.getUrlParent(window.location, option, count)
 
     if (parentUrl !== null) {
         window.location.href = parentUrl.href
@@ -2292,11 +2310,15 @@ export async function zoom(level = 0, rel = "false", tabId = "auto") {
     }
 }
 
-/** Opens the current page in Firefox's reader mode.
- * You currently cannot use Tridactyl while in reader mode.
+/**
+ * @hidden
+ * Old version of the reader command. Opens the current page in Firefox's reader mode.
+ * You cannot use Tridactyl while in this reader mode.
+ *
+ * Use [[reader]] instead
  */
 //#background
-export async function reader() {
+export async function readerold() {
     if (await firefoxVersionAtLeast(58)) {
         const aTab = await activeTab()
         if (aTab.isArticle) {
@@ -2359,6 +2381,7 @@ if (fullscreenApiIsPrefixed) {
 //#content
 export async function loadaucmds(cmdType: "DocStart" | "DocLoad" | "DocEnd" | "TabEnter" | "TabLeft" | "FullscreenEnter" | "FullscreenLeft" | "FullscreenChange" | "UriChange" | "HistoryState") {
     const aucmds = await config.getAsync("autocmds", cmdType)
+    if (!aucmds) return
     const ausites = Object.keys(aucmds)
     const aukeyarr = ausites.filter(e => window.document.location.href.search(e) >= 0)
     const owntab = await ownTab()
@@ -2726,6 +2749,7 @@ export async function tabopen_helper({ addressarr = [], waitForDom = false }): P
     let active
     let container
     let bypassFocusHack = false
+    let discarded = false
 
     const win = await browser.windows.getCurrent()
 
@@ -2741,6 +2765,11 @@ export async function tabopen_helper({ addressarr = [], waitForDom = false }): P
             argParse(args)
         } else if (args[0] === "--focus-address-bar") {
             bypassFocusHack = true
+            args.shift()
+            argParse(args)
+        } else if (args[0] === "--discard") {
+            discarded = true
+            active = false
             args.shift()
             argParse(args)
         } else if (args[0] === "-c") {
@@ -2788,6 +2817,7 @@ export async function tabopen_helper({ addressarr = [], waitForDom = false }): P
         args.cookieStoreId = containerId
     }
     args.bypassFocusHack = bypassFocusHack
+    args.discarded = discarded
     const maybeURL = await queryAndURLwrangler(query)
     if (typeof maybeURL === "string") {
         return openInNewTab(maybeURL, args, waitForDom)
@@ -2883,26 +2913,13 @@ async function idFromIndex(index?: number | "%" | "#" | string): Promise<number>
 async function tabFromIndex(index?: number | "%" | "#" | string): Promise<browser.tabs.Tab> {
     if (index === "#") {
         // Support magic previous/current tab syntax everywhere
-        const tabs = await getSortedWinTabs()
-        if (tabs.length < 2) {
-            // In vim, '#' is the id of the previous buffer even if said buffer has been wiped
-            // However, firefox doesn't store tab ids for closed tabs
-            // Since vim makes '#' default to the current buffer if only one buffer has ever been opened for the current session, it seems reasonable to return the id of the current tab if only one tab is opened in firefox
-            return activeTab()
-        }
-        return tabs[1]
+        return prevActiveTab()
     } else if (index !== undefined && index !== "%") {
-        // Wrap
+        const tabs = await getSortedTabs()
         index = Number(index)
-        index = (index - 1).mod((await browser.tabs.query({ currentWindow: true })).length) + 1
+        index = (index - 1).mod(tabs.length) + 1
 
-        // Return id of tab with that index.
-        return (
-            await browser.tabs.query({
-                currentWindow: true,
-                index: index - 1,
-            })
-        )[0]
+        return tabs[index - 1]
     } else {
         return activeTab()
     }
@@ -2938,17 +2955,6 @@ export async function tabduplicate(index?: number) {
 //#background
 export async function tabdetach(index?: number) {
     return browser.windows.create({ tabId: await idFromIndex(index) })
-}
-
-/** Get list of tabs sorted by most recent use
-
-    @hidden
-*/
-//#background_helper
-async function getSortedWinTabs(): Promise<browser.tabs.Tab[]> {
-    const tabs = await browser.tabs.query({ currentWindow: true })
-    tabs.sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : -1))
-    return tabs
 }
 
 /** Toggle fullscreen state
@@ -3049,8 +3055,8 @@ export async function undo(item = "recent"): Promise<number> {
     const session = sessions.find(predicate)
 
     if (session) {
-        browser.sessions.restore((session.tab || session.window).sessionId)
-        return (session.tab || session.window).id
+        const restore = await browser.sessions.restore((session.tab || session.window).sessionId)
+        return (restore.tab || restore.window).id
     }
     return -1
 }
@@ -3310,6 +3316,40 @@ export async function qall() {
 
 // }}}
 
+/**
+ * EXPERIMENTAL: like [[open]] but loads queries in the sidebar. Doesn't actually open the sidebar - see [[sidebartoggle]].
+ *
+ * Not all schemas are supported, such as `about:*` and Firefox's built-in search engines. Tridactyl's searchurls and jsurls work fine - `:set searchengine google` will be sufficient for most users.
+ *
+ * If you try to open the command line in the sidebar things will break.
+ */
+//#background
+export async function sidebaropen(...urllike: string[]) {
+    const url = await queryAndURLwrangler(urllike)
+    if (typeof url === "string") return browser.sidebarAction.setPanel({panel: url})
+    throw new Error("Unsupported URL for sidebar. If it was a search term try `:set searchengine google` first")
+}
+
+/**
+ * Like [[jsb]] but preserves "user action" intent for use with certain web extension APIs. Can only be called with browser mode binds, e.g.
+ *
+ * `:bind --mode=browser <C-.> jsua browser.sidebarAction.open(); tri.excmds.sidebaropen("https://mail.google.com/mail/mu")`
+ */
+//#background
+export async function jsua(){
+    throw new Error(":jsua can only be called through `bind --mode=browser` binds, see `:help jsua`")
+}
+
+/**
+ * Toggle the side bar. Can only be called through browser mode binds, e.g.
+ *
+ * `:bind --mode=browser <C-.> sidebartoggle`
+ */
+//#background
+export async function sidebartoggle(){
+    throw new Error(":sidebartoggle can only be called through `bind --mode=browser` binds, see `:help sidebartoggle`")
+}
+
 // {{{ CONTAINERS
 
 /** Closes all tabs open in the same container across all windows.
@@ -3456,7 +3496,7 @@ export async function tgroupcreate(name: string) {
     const promises = []
     const groups = await tgroups()
 
-    if (groups.has(name)) {
+    if (groups.has(name) || name === "#") {
         throw new Error(`Tab group "${name}" already exists`)
     }
 
@@ -3467,7 +3507,7 @@ export async function tgroupcreate(name: string) {
         promises.push(tgroupTabs(name, true).then(tabs => browserBg.tabs.hide(tabs.map(tab => tab.id))))
     } else {
         promises.push(
-            browser.tabs.query({ currentWindow: true }).then(tabs => {
+            browser.tabs.query({ currentWindow: true, pinned: false }).then(tabs => {
                 setTabTgroup(
                     name,
                     tabs.map(({ id }) => id),
@@ -3487,15 +3527,23 @@ export async function tgroupcreate(name: string) {
 /**
  * Switch to a different tab group, hiding all other tabs.
  *
+ * "%" denotes the current tab group and "#" denotes the tab group that was
+ * last active. "A" indates a tab group that contains an audible tab. Use
+ * `:set completions.Tab.statusstylepretty true` to display a unicode character
+ * instead.
+ *
  * @param name The name of the tab group to switch to.
  *
- * If the tab group does not exist, act like tgroupcreate.
+ * If the tab group does not exist, act like [[tgroupcreate]].
  *
  */
 //#background
 export async function tgroupswitch(name: string) {
+    if (name === "#") {
+        return tgrouplast().then(() => name)
+    }
     if (name == (await windowTgroup())) {
-        throw new Error(`Already on tab group "${name}"`)
+        return
     }
 
     const groups = await tgroups()
@@ -3542,22 +3590,39 @@ export async function tgrouprename(name: string) {
 }
 
 /**
- * Close the current tab group.
+ * Close all tabs in a tab group and delete the group.
  *
- * First switch to the previously active tab group. Do nothing if there is only
- * one tab group.
+ * @param name The name of the tab group to close. If not specified, close the
+ * current tab group and switch to the previously active tab group.
+ *
+ * Do nothing if there is only one tab group - to discard all tab group
+ * information, use [[tgroupabort]].
  *
  */
 //#background
-export async function tgroupclose() {
+export async function tgroupclose(name?: string) {
     const groups = await tgroups()
     if (groups.size == 0) {
         throw new Error("No tab groups exist")
     } else if (groups.size == 1) {
         throw new Error("This is the only tab group")
+    } else if (name !== undefined && name !== "#" && !groups.has(name)) {
+        throw new Error(`No tab group named "${name}"`)
     } else if (groups.size > 1) {
-        const closeGroup = await windowTgroup()
-        const newTabGroup = await tgroupActivateLast()
+        const currentGroup = await windowTgroup()
+        let closeGroup = currentGroup
+        if (name === "#") {
+            closeGroup = await windowLastTgroup()
+            if (name === undefined) {
+                throw new Error("No alternate tab group")
+            }
+        } else if (name !== undefined) {
+            closeGroup = name
+        }
+        let newTabGroup = currentGroup
+        if (closeGroup === currentGroup) {
+            newTabGroup = await tgroupActivateLast()
+        }
         await tgroupTabs(closeGroup).then(tabs => {
             browser.tabs.remove(tabs.map(tab => tab.id))
         })
@@ -3566,7 +3631,7 @@ export async function tgroupclose() {
 }
 
 /**
- * Move the current tab to another tab group.
+ * Move the current tab to another tab group, creating it if it does not exist.
  *
  * @param name The name of the tab group to move the tab to.
  *
@@ -3582,16 +3647,25 @@ export async function tgroupmove(name: string) {
     if (groups.size == 0) {
         throw new Error("No tab groups exist")
     }
-    if (!groups.has(name)) {
-        throw new Error(`Tab group "${name}" does not exist`)
-    }
     if (name == currentGroup) {
         throw new Error(`Tab is already on group "${name}"`)
+    }
+    if (name === "#") {
+        name = await windowLastTgroup()
+        if (name === undefined) {
+            throw new Error("No alternate tab group")
+        }
+    }
+    if (!groups.has(name)) {
+        // Create new tab group if there isn't one with this name
+        groups.add(name)
+        await setTgroups(groups)
     }
 
     const tabCount = await tgroupTabs(currentGroup).then(tabs => tabs.length)
 
     await setTabTgroup(name)
+    setContentStateGroup(name)
     const currentTabId = await activeTabId()
 
     // switch to other group if this is the last tab in the current group
@@ -4053,7 +4127,7 @@ export async function yankimage(url: string): Promise<void> {
 
         A string following the following format: "[0-9]+.[0-9]+" means the first number being the index of the window that should be selected and the second one being the index of the tab within that window. [[taball]] has completions for this format.
 
-        "%" denotes the current tab and "#" denotes the tab that was last accessed in this window.  "P", "A", "M" and "D" indicate tab status (i.e. a pinned, audible, muted or discarded tab.  Use `:set completions.Tab.statusstylepretty true` to display unicode characters instead.  "P","A","M","D" can be used to filter by tab status in either setting.
+        "%" denotes the current tab and "#" denotes the tab that was last accessed in this window.  "P", "A", "M" and "D" indicate tab status (i.e. a pinned, audible, muted or discarded tab).  Use `:set completions.Tab.statusstylepretty true` to display unicode characters instead.  "P","A","M","D" can be used to filter by tab status in either setting.
 
         A non integer string means to search the URL and title for matches, in this window if called from tab, all windows if called from taball. Title matches can contain '*' as a wildcard.
  */
@@ -4281,7 +4355,7 @@ export function bindshow(...args: string[]) {
      Generate a key sequence from keypresses. Once Enter is pressed, the command line is filled with a [[bind]]
      command with the key sequence and provided arguments, which you can choose to modify and execute.
 
-     If you have `:set keylayoutforce true`, it will bind commands to physical keys regardless of layout.
+     If you have `:set keyboardlayoutforce true`, it will bind commands to physical keys regardless of layout.
 
      Accepts the same arguments as [[bind]] (except for the key sequence which will be generated):
 
@@ -4298,6 +4372,7 @@ export async function bindwizard(...args: string[]) {
     }
     return gobble("<CR>", `fillcmdline_notrail bind --mode=${mode}`, ...args)
 }
+
 /**
  * Like [[bind]] but for a specific url pattern (also see [[seturl]]).
  *
@@ -4322,7 +4397,7 @@ export function bindurl(pattern: string, mode: string, keys: string, ...excmd: s
 }
 
 /**
- *  Deprecated: use `:set keylayoutforce true` instead.
+ *  Deprecated: use `:set keyboardlayoutforce true` instead.
  *
  *  Makes one key equivalent to another for the purposes of most of our parsers. Useful for international keyboard layouts. See user-provided examples for various layouts on our wiki: https://github.com/tridactyl/tridactyl/wiki/Internationalisation
  *
@@ -4332,8 +4407,8 @@ export function bindurl(pattern: string, mode: string, keys: string, ...excmd: s
  */
 //#background
 export function keymap(source: string, target: string) {
-    if (config.get("keylayoutforce") == "true") {
-        fillcmdline("You can't keymap with keylayoutforce set. Set values in keylayoutforcemapping to change layout for tridactyl shortcuts.")
+    if (config.get("keyboardlayoutforce") == "true") {
+        fillcmdline("You can't keymap with keyboardlayoutforce set. Set values in keyboardlayoutoverrides to change layout for tridactyl shortcuts.")
         return
     }
     return set("keytranslatemap." + source, target)
@@ -4511,6 +4586,11 @@ export function firefoxsyncpush() {
 /** @hidden */
 //#background_helper
 const AUCMDS = ["DocStart", "DocLoad", "DocEnd", "TriStart", "TabEnter", "TabLeft", "FullscreenChange", "FullscreenEnter", "FullscreenLeft", "UriChange", "HistoryState"].concat(webrequests.requestEvents)
+/** @hidden */
+//#background_helper
+export function getAutocmdEvents() {
+    return AUCMDS
+}
 /** Set autocmds to run when certain events happen.
  *
  * @param event Currently, 'TriStart', 'DocStart', 'DocLoad', 'DocEnd', 'TabEnter', 'TabLeft', 'FullscreenChange', 'FullscreenEnter', 'FullscreenLeft', 'HistoryState', 'HistoryPushState', 'HistoryReplace', 'UriChange', 'AuthRequired', 'BeforeRedirect', 'BeforeRequest', 'BeforeSendHeaders', 'Completed', 'ErrorOccured', 'HeadersReceived', 'ResponseStarted', and 'SendHeaders' are supported
@@ -4570,7 +4650,7 @@ const AUCMDS = ["DocStart", "DocLoad", "DocEnd", "TriStart", "TabEnter", "TabLef
 export function autocmd(event: string, url: string, ...excmd: string[]) {
     // rudimentary run time type checking
     // TODO: Decide on autocmd event names
-    if (!AUCMDS.includes(event)) throw new Error(event + " is not a supported event.")
+    if (!getAutocmdEvents().includes(event)) throw new Error(event + " is not a supported event.")
     return config.set("autocmds", event, url, excmd.join(" "))
 }
 
@@ -4663,7 +4743,7 @@ export function proxyremove(name: string) {
 */
 //#background
 export function autocmddelete(event: string, url: string) {
-    if (!AUCMDS.includes(event)) throw new Error(`${event} is not a supported event.`)
+    if (!getAutocmdEvents().includes(event)) throw new Error(`${event} is not a supported event.`)
     if (webrequests.requestEvents.includes(event)) {
         webrequests.unregisterWebRequestAutocmd(event, url)
     }
@@ -5061,8 +5141,10 @@ const KILL_STACK: Element[] = []
 
     Element selection flags:
         - -c [selector] hint links that match the css selector
-          - `bind ;c hint -c [class*="expand"],[class="togg"]` works particularly well on reddit and HN
+          - `bind ;c hint -c [class*="expand"],[class*="togg"]` works particularly well on reddit and HN
           - this works with most other hint modes, with the caveat that if other hint mode takes arguments your selector must contain no spaces, i.e. `hint -c[yourOtherFlag] [selector] [your other flag's arguments, which may contain spaces]`
+        - -C [selector] like `-c [selector]` but also hints all elements that would normally be hinted given the other options selected
+        - -x [selector] exclude the matched elements from hinting
         - -f [text] hint links and inputs that display the given text
           - `bind <c-e> hint -f Edit`
           - Backslashes can escape spaces: `bind <c-s> hint -f Save\ as`
@@ -5114,6 +5196,7 @@ const KILL_STACK: Element[] = []
     - `;gv` - "open link in MPV" - only available if you have [[native]] installed and `mpv` on your PATH
     - `;m` and `;M` - do a reverse image search using Google in the current tab and a new tab
     - `;x` and `;X` - move cursor to element and perform a real click or ctrl-shift-click (to open in a new foreground tab). Only available on Linux, if you have [[native]] installed and `xdotool` on your PATH
+    - `;d` and `;gd` - open links in discarded background tabs (defer loading until tab is switched to)
 
     NB: by default, hinting respects whether links say they should be opened in new tabs (i.e. `target=_blank`). If you wish to override this you can use `:hint -JW open` to force the hints to open in the current tab. JavaScript hints (grey ones) will always open wherever they want, but if you want to include these anyway you can use `:hint -W open`.
 
@@ -5836,6 +5919,65 @@ export async function issue() {
 }
 
 /**
+ * Generates a QR code for the given text. By default opens in new tab. Default binds close the new tab after 5 seconds.
+ * If no text is passed as an argument then it checks if any text is selected and creates a QR code for that.
+ * If no selection is found then it creates QR code for the current tab's URL
+ *
+ * `text2qr --popup [...]` will open the QR code in a new popup window
+ *
+ * `text2qr --window [...]`  will open the QR code in a new window
+ *
+ * `text2qr --current [...]` will open in the current tab
+ *
+ * `text2qr --timeout <timeout in seconds> [...]` closes the tab/window/popup after specified number of seconds
+ *
+ * Example: text2qr --timeout 5 --popup hello world
+ */
+//#content
+export async function text2qr(...args: string[]) {
+    let text: string = null
+    let isParsed = false
+    let openMode = null
+    let timeout = "-1"
+    while (!isParsed) {
+        switch (args[0]) {
+            case "--window":
+                openMode = winopen
+                args.shift()
+                break
+            case "--popup":
+                openMode = (...args) => winopen("-popup", ...args)
+                args.shift()
+                break
+            case "--current":
+                openMode = open
+                args.shift()
+                break
+            case "--timeout":
+                args.shift()
+                timeout = args[0]
+                args.shift()
+                break
+            default:
+                isParsed = true
+                break
+        }
+    }
+
+    if (!openMode) openMode = tabopen // default to new tab if no option provided
+
+    text = args.join(" ").trim()
+    if (!text || text.length == 0) {
+        text = window.location.href
+    }
+    const urlEncodedText = encodeURIComponent(text)
+    const url = new URL(browser.runtime.getURL("static/qrcode.html"))
+    url.searchParams.append("data", btoa(urlEncodedText))
+    url.searchParams.append("timeout", timeout)
+    openMode(url.href)
+}
+
+/**
  * Checks if there are any stable updates available for Tridactyl.
  *
  * Related settings:
@@ -5932,6 +6074,56 @@ export async function extoptions(...optionNameArgs: string[]) {
     const extensions = await Extensions.listExtensions()
     const selectedExtension = extensions.find(ext => ext.name === optionName)
     return winopen("-popup", selectedExtension.optionsUrl)
+}
+
+//#content_helper
+import { Readability } from "@mozilla/readability"
+
+/**
+ * @hidden
+ */
+//#content_helper
+export async function readerurl() {
+    document.querySelectorAll(".TridactylStatusIndicator").forEach(ind => ind.parentNode.removeChild(ind))
+    const article = new Readability(document.cloneNode(true) as any as Document).parse()
+    article["link"] = window.location.href
+    return browser.runtime.getURL("static/reader.html#" + btoa(encodeURIComponent(JSON.stringify(article))))
+}
+
+/**
+ * Open the current page as an article in reader view for easier reading. Flags `--tab` and `--window` open the article in new tabs and windows respectively.
+ *
+ * Use `:reader --old` to use Firefox's built-in reader mode, which Tridactyl can't run on.
+ *
+ * __NB:__ the reader page is a privileged environment which has access to all Tridactyl functions, notably the native messenger if you have it installed. We are parsing untrusted web-content to run in this environment. Mozilla's readability library will strip out most of these, then we use a sanitation library, `js-xss`, to strip out any remaining unsafe tags, but if there was a serious bug in this library, and a targeted attack against Tridactyl, an attacker could get remote code execution. If you're worried about this, use `:reader --old` instead or only use `:reader` on pages you trust.
+ *
+ * You may use [userContent.css](http://kb.mozillazine.org/index.php?title=UserContent.css&printable=yes) to enhance or override default styling of the new reader view. The `body` of the page has id `tridactyl-reader` and the article content follows in a `main` tag. Therefore to alter default styling, you can do something like this in your `userContent.css`:
+ *
+ * ```css
+ * #tridactyl-reader > main {
+ *   width: 80vw !important;
+ *   text-align: left;
+ * }
+ * ```
+ *
+ * Follow [issue #4657](https://github.com/tridactyl/tridactyl/issues/4657) if you would like to find out when we have made a more user-friendly solution.
+ */
+//#content
+export async function reader(...args: string[]) {
+    switch(args[0]) {
+        case "--old":
+            readerold()
+            break
+        case "--tab":
+            tabopen(await readerurl())
+            break
+        case "--window":
+            winopen(await readerurl())
+            break
+        default:
+            open(await readerurl())
+            break
+    }
 }
 
 /**

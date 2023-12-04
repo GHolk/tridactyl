@@ -67,19 +67,23 @@
 " bindurl reddit.com gu urlparent 4
 " 
 " " Only hint search results on Google and DDG
-" bindurl www.google.com f hint -Jc #search div:not(.action-menu) > a
-" bindurl www.google.com F hint -Jbc #search div:not(.action-menu) > a
+" bindurl www.google.com f hint -Jc #search a
+" bindurl www.google.com F hint -Jbc #search a
 " 
 " 
-" bindurl ^https://duckduckgo.com f hint -Jc [data-testid="result-title-a"]
-" bindurl ^https://duckduckgo.com F hint -Jbc [data-testid="result-title-a"]
+" " Broken as of 2023-07-18
+" " bindurl ^https://duckduckgo.com f hint -Jc [data-testid="result-title-a"]
+" " bindurl ^https://duckduckgo.com F hint -Jbc [data-testid="result-title-a"]
+
+" " Make `gi` on GitHub take you to the search box
+" bindurl ^https://github.com gi hint -Vc .AppHeader-searchButton
 " 
 " " Allow Ctrl-a to select all in the commandline
 " unbind --mode=ex <C-a>
 " 
 " " Allow Ctrl-c to copy in the commandline
 " unbind --mode=ex <C-c>
-" 
+"
 " " Handy multiwindow/multitasking binds
 " bind gd tabdetach
 " bind gD composite tabduplicate; tabdetach
@@ -90,6 +94,10 @@
 " " Open right click menu on links
 " bind ;C composite hint_focus; !s xdotool key Menu
 " 
+" " Binds for new reader mode
+" bind gr reader
+" bind gR reader --tab
+"
 " " Suspend / "discard" all tabs - handy for stretching out battery life
 " command discardall jsb browser.tabs.query({}).then(ts => browser.tabs.discard(ts.map(t=>t.id)))
 " 
@@ -159,8 +167,6 @@
 " 
 " " New reddit is bad
 " autocmd DocStart ^http(s?)://www.reddit.com js tri.excmds.urlmodify("-t", "www", "old")
-" " Mosquito nets won't make themselves
-" autocmd DocStart ^http(s?)://www.amazon.co.uk js tri.excmds.urlmodify("-t", "www", "smile")
 " 
 " " Isolate Facebook in its own container
 " " set auconcreatecontainer true

@@ -6,7 +6,7 @@ Tridactyl
 <br>
 </h1>
 
-<h4>Replace Firefox's default control mechanism with one modelled on the one true editor, Vim. </h4>
+<h4 align="center">Replace Firefox's default control mechanism with one modelled on the one true editor, Vim.</h4>
 
 <p align="center">
 <a href="https://travis-ci.org/tridactyl/tridactyl"><img src="https://travis-ci.org/tridactyl/tridactyl.svg?branch=master" alt="Build Status"></a>
@@ -49,7 +49,7 @@ Tridactyl stable can be installed from the [Mozilla add-ons website (the AMO)][a
 
 ### Beta
 
-[Click this in Firefox to install our "beta" builds][riskyclick]. These [betas][betas] are updated with each commit to master on this repo. Your browser will automatically update from there once a day. If you want more frequent updates, you can change `extensions.update.interval` in `about:config` to whatever time you want, say, 15 minutes (900 seconds). There is also another beta build that comes without a new tab page. You can get it from [here][nonewtablink].
+[Click this in Firefox to install our "beta" builds][riskyclick]. These [betas][betas] used to be updated with each commit to master on this repo but are now built manually when bovine3dom remembers - see [issue #3605](https://github.com/tridactyl/tridactyl/issues/3605). Your browser will automatically update from there once a day. If you want more frequent updates, you can change `extensions.update.interval` in `about:config` to whatever time you want, say, 15 minutes (900 seconds). There is also another beta build that comes without a new tab page. You can get it from [here][nonewtablink].
 
 ### Extra features through [Native Messaging](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging)
 
@@ -60,7 +60,7 @@ If you want to use advanced features such as edit-in-Vim, you'll also need to in
 **Snap and Flatpak:** Native Messaging support here is fairly recent and may require:
 
 * Upgrading to a beta version of Firefox (`>= 106.0b6`)
-* Enabling webextension permisisons: `flatpack permission-set webextensions tridactyl snap.firefox yes`
+* Enabling webextension permissions: `flatpak permission-set webextensions tridactyl snap.firefox yes`
 * Rebooting your system (and likely nothing short of it)
 
 See [this call for testing thread](https://discourse.ubuntu.com/t/call-for-testing-native-messaging-support-in-the-firefox-snap/29759) and [this PR](https://github.com/tridactyl/tridactyl/pull/4406) for more details and troubleshooting tips.
@@ -80,7 +80,7 @@ The changelog for the stable versions can be found [here](https://github.com/tri
 
 ## First look
 
-Type `:help` or press `<F1>` for online help once you're in, or `:tutor` for a friendly introduction. You might also find the [unofficial Tridactyl Memrise course](https://app.memrise.com/course/5995499/tridactyls-main-shortcuts/) useful for memorising keybinds.
+Type `:help` or press `<F1>` for online help once you're in, or `:tutor` for a friendly introduction. You might also find the [unofficial Tridactyl Memrise course](https://app.memrise.com/community/course/5995499/tridactyls-main-shortcuts/) (requires login) useful for memorising keybinds.
 
 Remember that Tridactyl cannot run on any page on about:\*, data:\*, view-source:\* and file:\*. We're sorry about that and we're working with Firefox to improve this situation by removing restrictions on existing APIs and developing a new API.
 
@@ -202,19 +202,25 @@ You can bind your own shortcuts in normal mode with the `:bind` command. For exa
 
     Please visit our [troubleshooting guide](https://github.com/tridactyl/tridactyl/blob/master/doc/troubleshooting.md).
 
--   How can I change the search engine?
+-   How can I change the default search engine?
 
-    `set searchengine duckduckgo`
+    `:set searchengine [searchurl name]`, e.g. `:set searchengine google`
+
+    For instance, to use the European Space Agency as the default search engine (which may not necessarily be a good idea):
+
+    `:set searchurls.esa http://www.esa.int/esasearch?q=`
+
+    `:set searchengine esa`
 
 -   How can I add a search engine?
 
-    `set searchurls.esa http://www.esa.int/esasearch?q=`
+    `:set searchurls.esa http://www.esa.int/esasearch?q=`
 
     You can also add `%s` to specify exactly where the search query should go, which is useful for more inventive uses, such as
 
-    `set searchurls.phrasebook https://translate.google.co.uk/#en/%s/my%20hovercraft%20is%20full%20of%20eels`
+    `:set searchurls.phrasebook https://translate.google.co.uk/#en/%s/my%20hovercraft%20is%20full%20of%20eels`
 
-    after which `open phrasebook [fr|de|la|es|hi|it...]` will work as expected.
+    after which `:open phrasebook [fr|de|la|es|hi|it...]` will work as expected.
 
 -   Can I import/export settings, and does Tridactyl use an external configuration file just like Vimperator?
 
@@ -235,7 +241,7 @@ You can bind your own shortcuts in normal mode with the `:bind` command. For exa
     -   quakelight
     -   midnight (authored by @karizma)
 
-    Tridactyl can also load themes from disk or URL, which would let you use one of the themes authored by @bezmi ([bezmi/base16-tridactyl](https://github.com/bezmi/base16-tridactyl)). See `:help colors` for more information.
+    Tridactyl can also load themes from disk or URL. You could use this for example to load one of the themes originally authored by @bezmi ([tridactyl/base16-tridactyl](https://github.com/tridactyl/base16-tridactyl)). See `:help colors` for more information.
 
 -   How to remap keybindings? or How can I bind keys using the control/alt key modifiers (eg: `ctrl+^`)?
 

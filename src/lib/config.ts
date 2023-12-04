@@ -85,6 +85,9 @@ export class default_config {
                 next: "Next",
                 prev: "Previous",
             },
+            nmaps: {
+                gi: "composite focusinput -l ; text.end_of_line", // Fix #4706
+            },
         },
         "^https://web.whatsapp.com": {
             nmaps: {
@@ -129,7 +132,7 @@ export class default_config {
         "<C-[>": "ex.hide_and_clear",
         "<ArrowUp>": "ex.prev_history",
         "<ArrowDown>": "ex.next_history",
-        "<S-Del>": "ex.execute_ex_on_completion_args tabclose",
+        "<S-Delete>": "ex.execute_ex_on_completion_args tabclose",
 
         "<A-b>": "text.backward_word",
         "<A-f>": "text.forward_word",
@@ -146,6 +149,8 @@ export class default_config {
         "<C-Space>": "ex.insert_space",
 
         "<C-o>yy": "ex.execute_ex_on_completion_args clipboard yank",
+        "<C-o>t": "ex.execute_ex_on_completion_args tabopen -b",
+        "<C-o>w": "ex.execute_ex_on_completion_args winopen",
     }
 
     /**
@@ -229,6 +234,7 @@ export class default_config {
         T: "current_url tabopen",
         yy: "clipboard yank",
         ys: "clipboard yankshort",
+        yq: "text2qr --timeout 5",
         yc: "clipboard yankcanon",
         ym: "clipboard yankmd",
         yo: "clipboard yankorg",
@@ -282,7 +288,7 @@ export class default_config {
         g0: "tabfirst",
         g$: "tablast",
         ga: "tabaudio",
-        gr: "reader",
+        gr: "reader --old",
         gu: "urlparent",
         gU: "urlroot",
         gf: "viewsource",
@@ -328,9 +334,11 @@ export class default_config {
         ";O": "hint -W fillcmdline_notrail open ",
         ";W": "hint -W fillcmdline_notrail winopen ",
         ";T": "hint -W fillcmdline_notrail tabopen ",
+        ";d": "hint -W tabopen --discard",
+        ";gd": "hint -qW tabopen --discard",
         ";z": "hint -z",
-        ";m": "composite hint -Jpipe img src | open images.google.com/searchbyimage?image_url=",
-        ";M": "composite hint -Jpipe img src | tabopen images.google.com/searchbyimage?image_url=",
+        ";m": "hint -JFc img i => tri.excmds.open('https://lens.google.com/uploadbyurl?url='+i.src)",
+        ";M": "hint -JFc img i => tri.excmds.tabopen('https://lens.google.com/uploadbyurl?url='+i.src)",
         ";gi": "hint -qi",
         ";gI": "hint -qI",
         ";gk": "hint -qk",
@@ -389,6 +397,7 @@ export class default_config {
         w: 'js document.getSelection().modify("extend","forward","word"); document.getSelection().modify("extend","forward","word"); document.getSelection().modify("extend","backward","word"); document.getSelection().modify("extend","forward","character")',
         b: 'js document.getSelection().modify("extend","backward","character"); document.getSelection().modify("extend","backward","word"); document.getSelection().modify("extend","forward","character")',
         j: 'js document.getSelection().modify("extend","forward","line")',
+        q: "composite js document.getSelection().toString() | text2qr --timeout 5",
         // "j": 'js document.getSelection().modify("extend","forward","paragraph")', // not implemented in Firefox
         k: 'js document.getSelection().modify("extend","backward","line")',
         $: 'js document.getSelection().modify("extend","forward","lineboundary")',
@@ -419,7 +428,7 @@ export class default_config {
     browsermaps = {
         "<C-,>": "escapehatch",
         "<C-6>": "tab #",
-        "<CS-6>": "tab #",
+        // "<CS-6>": "tab #", // banned by e2e tests
     }
 
     /**
@@ -517,8 +526,8 @@ export class default_config {
      * of `;g`.
      *
      * This was primarily useful for international users, but now you can `set
-     * keylayoutforce true`, which will make everything layout-independent(and work like qwerty by default),
-     * and use [[keylayoutforcemapping]] setting to change the desired layout.
+     * keyboardlayoutforce true`, which will make everything layout-independent(and work like qwerty by default),
+     * and use [[keyboardlayoutoverrides]] setting to change the desired layout.
      *
      *
      * For example, you may want to map 'a' to 'q` on azerty
@@ -538,81 +547,42 @@ export class default_config {
     /**
      * @deprecated Whether to use the keytranslatemap.
      * Legacy option to map one keyboard character to another, was used to emulate
-     * layout-independence. Now deprecated since you can set your layout once with [[keylayoutforce]]
-     * and [[keylayoutforcemapping]].
+     * layout-independence. Now deprecated since you can set your layout once with [[keyboardlayoutforce]]
+     * and [[keyboardlayoutoverrides]].
      */
     usekeytranslatemap: "true" | "false" = "true"
 
     /**
      * Instead of fetching actual character which depends on selected layout,
-     * use machine code of a key and convert to character according to keylayoutforcemapping. The default layout mapping
-     * is QWERTY, but can be changed with `set keylayoutforcemapping <Code> <Values>`. See [[keylayoutforcemapping]].
+     * use machine code of a key and convert to character according to keyboardlayoutoverrides. The default layout mapping
+     * is US `qwerty`, but can be changed with [[keyboardlayoutbase]].
      *
      * There is a much more detailed help page towards the end of `:tutor` under the title "Non-QWERTY layouts".
      *
-     * Recommended for everyone with multiple or/and non-latin keyboard layouts. Make sure usekeytranslatemap is false
+     * Recommended for everyone with multiple or/and non-latin keyboard layouts. Make sure [[usekeytranslatemap]] is false
      * if you have previously used `keymap`.
      */
-    keylayoutforce: "true" | "false" = "false"
+    keyboardlayoutforce: "true" | "false" = "false"
 
     /**
-     * Key codes for printable keys for [[keylayoutforce]], lower and upper register.
-     * See https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values
-     * This assumes en-US layout by default, but you can use this setting to change that.
+     * Base keyboard layout to use when [[keyboardlayoutforce]] is enabled. At the time of writing, the following layouts are supported: `qwerty, azerty, german, dvorak, uk, ca, bepo`. Requires page reload to take effect.
+     *
+     * If your layout is missing, you can contribute it with the help of https://gistpreview.github.io/?324119c773fac31651f6422087b36804 - please just open an `:issue` with your layout and we'll add it.
+     *
+     * You can manually override individual keys for a layout with [[keyboardlayoutoverrides]].
+     */
+    keyboardlayoutbase: keyof typeof keyboardlayouts = "qwerty"
+
+    /**
+     * Override individual keys for a layout when [[keyboardlayoutforce]] is enabled. Changes take effect only after a page reload.
+     *
+     * Key codes for printable keys for [[keyboardlayoutforce]], lower and upper register. See https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values for the names of each key.
      *
      * NB: due to a Tridactyl bug, you cannot set this using array notation as you can for, e.g. [[homepage]].
      * You must instead set the lower and upper registers using a string with no spaces in it, for example
-     * `:set keylayoutforcemapping Digit2: 2"` for the British English layout.
+     * `:set keyboardlayoutoverrides Digit2: 2"` for the British English layout.
      */
-    keylayoutforcemapping = {
-        KeyA: ["a", "A"],
-        KeyB: ["b", "B"],
-        KeyC: ["c", "C"],
-        KeyD: ["d", "D"],
-        KeyE: ["e", "E"],
-        KeyF: ["f", "F"],
-        KeyG: ["g", "G"],
-        KeyH: ["h", "H"],
-        KeyI: ["i", "I"],
-        KeyJ: ["j", "J"],
-        KeyK: ["k", "K"],
-        KeyL: ["l", "L"],
-        KeyM: ["m", "M"],
-        KeyN: ["n", "N"],
-        KeyO: ["o", "O"],
-        KeyP: ["p", "P"],
-        KeyQ: ["q", "Q"],
-        KeyR: ["r", "R"],
-        KeyS: ["s", "S"],
-        KeyT: ["t", "T"],
-        KeyU: ["u", "U"],
-        KeyV: ["v", "V"],
-        KeyW: ["w", "W"],
-        KeyX: ["x", "X"],
-        KeyY: ["y", "Y"],
-        KeyZ: ["z", "Z"],
-        Digit0: ["0", ")"],
-        Digit1: ["1", "!"],
-        Digit2: ["2", "@"],
-        Digit3: ["3", "#"],
-        Digit4: ["4", "$"],
-        Digit5: ["5", "%"],
-        Digit6: ["6", "^"],
-        Digit7: ["7", "&"],
-        Digit8: ["8", "*"],
-        Digit9: ["9", "("],
-        Equal: ["=", "+"],
-        Backquote: ["`", "~"],
-        Backslash: ["\\", "|"],
-        Period: [".", ">"],
-        Comma: [",", "<"],
-        Semicolon: [";", ":"],
-        Slash: ["/", "?"],
-        BracketLeft: ["[", "{"],
-        BracketRight: ["]", "}"],
-        Quote: ["'", '"'],
-        Minus: ["-", "_"],
-    }
+    keyboardlayoutoverrides = {}
 
     /**
      * Automatically place these sites in the named container.
@@ -799,7 +769,7 @@ export class default_config {
     }
 
     /**
-     * Like [[searchurls]] but must be a Javascript function that takes one argument (a single string with the remainder of the command line including spaces) and maps it to a valid href that will be followed, e.g. `set jsurls.googleloud query => "https://google.com/search?q=" + query.toUpperCase()`
+     * Like [[searchurls]] but must be a Javascript function that takes one argument (a single string with the remainder of the command line including spaces) and maps it to a valid href (or a promise that resolves to a valid href) that will be followed, e.g. `set jsurls.googleloud query => "https://google.com/search?q=" + query.toUpperCase()`
      *
      * NB: the href must be valid, i.e. it must include the protocol (e.g. "http://") and not just be e.g. "www.".
      */
@@ -907,7 +877,9 @@ export class default_config {
     tabclosepinned: "true" | "false" = "true"
 
     /**
-     * Controls which tab order to use when opening the tab/buffer list. Either mru = sort by most recent tab or default = by tab index
+     * Controls which tab order to use when numbering tabs. Either mru = sort by most recent tab or default = by tab index
+     *
+     * Applies to all places where Tridactyl numbers tabs including `:tab`, `:tabnext_gt` etc. (so, for example, with `:set tabsort mru` `2gt` would take you to the second most recently used tab, not the second tab in the tab bar).
      */
     tabsort: "mru" | "default" = "default"
 
@@ -1177,6 +1149,11 @@ export class default_config {
     bmarkweight = 100
 
     /**
+     * When displaying searchurls in history completions, how many page views to pretend they have.
+     */
+    searchurlweight = 150
+
+    /**
      * Default selector for :goto command.
      */
     gotoselector = "h1, h2, h3, h4, h5, h6"
@@ -1292,6 +1269,30 @@ export class default_config {
     urlparenttrailingslash: "true" | "false" = "true"
 
     /**
+     * Whether removal of the url fragment (the name after # in the url)
+     * is counted as a parent level.
+     */
+    urlparentignorefragment: "true" | "false" = "false"
+
+    /**
+     * Whether removal the url search parameter (the name after ? in the url)
+     * is counted as a parent level.
+     */
+    urlparentignoresearch: "true" | "false" = "false"
+
+    /**
+     * RegExp to remove from the url pathname before go to any parent path.
+     * To ignore "index.html" in "parent/index.html", set it to
+     * "//index\.html/". The regexp flag is supported, and the escape of
+     * the slashes inside the regexp is not required.
+     *
+     * An empty string will disable this feature.
+     *
+     * Suggested value: //index\.(html?|php|aspx?|jsp|cgi|pl|js)$/i
+     */
+    urlparentignorepathregexp = ""
+
+    /**
      * Whether to enter visual mode when text is selected. Visual mode can always be entered with `:mode visual`.
      */
     visualenterauto: "true" | "false" = "true"
@@ -1316,6 +1317,11 @@ export class default_config {
      * https://fusejs.io/api/options.html#threshold
      */
     completionfuzziness = 0.3
+
+    /**
+     * Whether to show article url in the document.title of Reader View.
+     */
+    readerurlintitle: "true" | "false" = "false"
 }
 
 const platform_defaults = {
@@ -1355,6 +1361,359 @@ Remove-Item '%TEMP%/tridactyl_installnative.ps1'"`,
         } as unknown,
     },
 } as Record<browser.runtime.PlatformOs, default_config>
+
+/**
+ * Key codes for printable keys for [[keyboardlayoutforce]], lower and upper register.
+ * See https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values
+ * These maps are assigned via `:set keyboardlayoutbase`
+ * but keyboardlayoutoverrides can also be changed manually with `:set`.
+ *
+ * If your layout is missing here, you can contribute it with the help of [this](https://gistpreview.github.io/?324119c773fac31651f6422087b36804)
+ * tool.
+ */
+export const keyboardlayouts = {
+    qwerty: {
+        KeyA: ["a", "A"],
+        KeyB: ["b", "B"],
+        KeyC: ["c", "C"],
+        KeyD: ["d", "D"],
+        KeyE: ["e", "E"],
+        KeyF: ["f", "F"],
+        KeyG: ["g", "G"],
+        KeyH: ["h", "H"],
+        KeyI: ["i", "I"],
+        KeyJ: ["j", "J"],
+        KeyK: ["k", "K"],
+        KeyL: ["l", "L"],
+        KeyM: ["m", "M"],
+        KeyN: ["n", "N"],
+        KeyO: ["o", "O"],
+        KeyP: ["p", "P"],
+        KeyQ: ["q", "Q"],
+        KeyR: ["r", "R"],
+        KeyS: ["s", "S"],
+        KeyT: ["t", "T"],
+        KeyU: ["u", "U"],
+        KeyV: ["v", "V"],
+        KeyW: ["w", "W"],
+        KeyX: ["x", "X"],
+        KeyY: ["y", "Y"],
+        KeyZ: ["z", "Z"],
+        Digit0: ["0", ")"],
+        Digit1: ["1", "!"],
+        Digit2: ["2", "@"],
+        Digit3: ["3", "#"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "^"],
+        Digit7: ["7", "&"],
+        Digit8: ["8", "*"],
+        Digit9: ["9", "("],
+        Equal: ["=", "+"],
+        Backquote: ["`", "~"],
+        Backslash: ["\\", "|"],
+        Period: [".", ">"],
+        Comma: [",", "<"],
+        Semicolon: [";", ":"],
+        Slash: ["/", "?"],
+        BracketLeft: ["[", "{"],
+        BracketRight: ["]", "}"],
+        Quote: ["'", '"'],
+        Minus: ["-", "_"],
+    },
+    azerty: {
+        Backquote: ["²", "²"],
+        Digit1: ["&", "1"],
+        Digit2: ["é", "2"],
+        Digit3: ['"', "3"],
+        Digit4: ["'", "4"],
+        Digit5: ["(", "5"],
+        Digit6: ["-", "6"],
+        Digit7: ["è", "7"],
+        Digit8: ["_", "8"],
+        Digit9: ["ç", "9"],
+        Digit0: ["à", "0"],
+        Minus: [")", "°"],
+        Equal: ["=", "+"],
+        KeyQ: ["a", "A"],
+        KeyW: ["z", "Z"],
+        KeyE: ["e", "E"],
+        KeyR: ["r", "R"],
+        KeyT: ["t", "T"],
+        KeyY: ["y", "Y"],
+        KeyU: ["u", "U"],
+        KeyI: ["i", "I"],
+        KeyO: ["o", "O"],
+        KeyP: ["p", "P"],
+        BracketRight: ["$", "£"],
+        Backslash: ["*", "µ"],
+        KeyA: ["q", "Q"],
+        KeyS: ["s", "S"],
+        KeyD: ["d", "D"],
+        KeyF: ["f", "F"],
+        KeyG: ["g", "G"],
+        KeyH: ["h", "H"],
+        KeyJ: ["j", "J"],
+        KeyK: ["k", "K"],
+        KeyL: ["l", "L"],
+        Semicolon: ["m", "M"],
+        Quote: ["ù", "%"],
+        KeyZ: ["w", "W"],
+        KeyX: ["x", "X"],
+        KeyC: ["c", "C"],
+        KeyV: ["v", "V"],
+        KeyB: ["b", "B"],
+        KeyN: ["n", "N"],
+        KeyM: [",", "?"],
+        Comma: [";", "."],
+        Period: [":", "/"],
+        Slash: ["!", "§"],
+    },
+    german: {
+        Digit1: ["1", "!"],
+        Digit2: ["2", '"'],
+        Digit3: ["3", "§"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "&"],
+        Digit7: ["7", "/"],
+        Digit8: ["8", "("],
+        Digit9: ["9", ")"],
+        Digit0: ["0", "="],
+        Minus: ["ß", "?"],
+        KeyQ: ["q", "Q"],
+        KeyW: ["w", "W"],
+        KeyE: ["e", "E"],
+        KeyR: ["r", "R"],
+        KeyT: ["t", "T"],
+        KeyY: ["z", "Z"],
+        KeyU: ["u", "U"],
+        KeyI: ["i", "I"],
+        KeyO: ["o", "O"],
+        KeyP: ["p", "P"],
+        BracketLeft: ["ü", "Ü"],
+        BracketRight: ["+", "*"],
+        Backslash: ["#", "'"],
+        KeyA: ["a", "A"],
+        KeyS: ["s", "S"],
+        KeyD: ["d", "D"],
+        KeyF: ["f", "F"],
+        KeyG: ["g", "G"],
+        KeyH: ["h", "H"],
+        KeyJ: ["j", "J"],
+        KeyK: ["k", "K"],
+        KeyL: ["l", "L"],
+        Semicolon: ["ö", "Ö"],
+        Quote: ["ä", "Ä"],
+        KeyZ: ["y", "Y"],
+        KeyX: ["x", "X"],
+        KeyC: ["c", "C"],
+        KeyV: ["v", "V"],
+        KeyB: ["b", "B"],
+        KeyN: ["n", "N"],
+        KeyM: ["m", "M"],
+        Comma: [",", ";"],
+        Period: [".", ":"],
+        Slash: ["-", "_"],
+        Backquote: ["", "°"],
+    },
+    dvorak: {
+        Backquote: ["`", "~"],
+        Digit1: ["1", "!"],
+        Digit2: ["2", "@"],
+        Digit3: ["3", "#"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "^"],
+        Digit7: ["7", "&"],
+        Digit8: ["8", "*"],
+        Digit9: ["9", "("],
+        Digit0: ["0", ")"],
+        Minus: ["[", "{"],
+        Equal: ["]", "}"],
+        KeyQ: ["'", '"'],
+        KeyW: [",", "<"],
+        KeyE: [".", ">"],
+        KeyR: ["p", "P"],
+        KeyT: ["y", "Y"],
+        KeyY: ["f", "F"],
+        KeyU: ["g", "G"],
+        KeyI: ["c", "C"],
+        KeyO: ["r", "R"],
+        KeyP: ["l", "L"],
+        BracketLeft: ["/", "?"],
+        BracketRight: ["=", "+"],
+        Backslash: ["\\", "|"],
+        KeyA: ["a", "A"],
+        KeyS: ["o", "O"],
+        KeyD: ["e", "E"],
+        KeyF: ["u", "U"],
+        KeyG: ["i", "I"],
+        KeyH: ["d", "D"],
+        KeyJ: ["h", "H"],
+        KeyK: ["t", "T"],
+        KeyL: ["n", "N"],
+        Semicolon: ["s", "S"],
+        Quote: ["-", "_"],
+        KeyZ: [";", ":"],
+        KeyX: ["q", "Q"],
+        KeyC: ["j", "J"],
+        KeyV: ["k", "K"],
+        KeyB: ["x", "X"],
+        KeyN: ["b", "B"],
+        KeyM: ["m", "M"],
+        Comma: ["w", "W"],
+        Period: ["v", "V"],
+        Slash: ["z", "Z"],
+    },
+    uk: {
+        Digit1: ["1", "!"],
+        Digit2: ["2", '"'],
+        Digit3: ["3", "£"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "^"],
+        Digit7: ["7", "&"],
+        Digit8: ["8", "*"],
+        Digit9: ["9", "("],
+        Digit0: ["0", ")"],
+        Minus: ["-", "_"],
+        Equal: ["=", "+"],
+        KeyQ: ["q", "Q"],
+        KeyW: ["w", "W"],
+        KeyE: ["e", "E"],
+        KeyR: ["r", "R"],
+        KeyT: ["t", "T"],
+        KeyY: ["y", "Y"],
+        KeyU: ["u", "U"],
+        KeyI: ["i", "I"],
+        KeyO: ["o", "O"],
+        KeyP: ["p", "P"],
+        BracketLeft: ["[", "{"],
+        KeyK: ["k", "K"],
+        BracketRight: ["]", "}"],
+        KeyA: ["a", "A"],
+        KeyS: ["s", "S"],
+        KeyD: ["d", "D"],
+        KeyF: ["f", "F"],
+        KeyG: ["g", "G"],
+        KeyH: ["h", "H"],
+        KeyJ: ["j", "J"],
+        Semicolon: [";", ":"],
+        Quote: ["'", "@"],
+        Backslash: ["#", "~"],
+        IntlBackslash: ["\\", "|"],
+        KeyZ: ["z", "Z"],
+        KeyX: ["x", "X"],
+        KeyC: ["c", "C"],
+        KeyV: ["v", "V"],
+        KeyB: ["b", "B"],
+        KeyN: ["n", "N"],
+        KeyM: ["m", "M"],
+        Period: [".", ">"],
+        Slash: ["/", "?"],
+        Backquote: ["`", "¬"],
+        KeyL: ["l", "L"],
+        Comma: [",", "<"],
+    },
+    ca: {
+        Backquote: ["#", "|"],
+        Digit1: ["1", "!"],
+        Digit2: ["2", '"'],
+        Digit3: ["3", "/"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "?"],
+        Digit7: ["7", "&"],
+        Digit8: ["8", "*"],
+        Digit9: ["9", "("],
+        Digit0: ["0", ")"],
+        Minus: ["-", "_"],
+        Equal: ["=", "+"],
+        KeyQ: ["q", "Q"],
+        KeyW: ["w", "W"],
+        KeyE: ["e", "E"],
+        KeyR: ["r", "R"],
+        KeyT: ["t", "T"],
+        KeyY: ["y", "Y"],
+        KeyU: ["u", "U"],
+        KeyI: ["i", "I"],
+        KeyO: ["o", "O"],
+        KeyP: ["p", "P"],
+        KeyA: ["a", "A"],
+        KeyS: ["s", "S"],
+        KeyD: ["d", "D"],
+        KeyF: ["f", "F"],
+        KeyG: ["g", "G"],
+        KeyH: ["h", "H"],
+        KeyJ: ["j", "J"],
+        KeyK: ["k", "K"],
+        KeyL: ["l", "L"],
+        Semicolon: [";", ":"],
+        Backslash: ["<", ">"],
+        IntlBackslash: ["«", "»"],
+        KeyZ: ["z", "Z"],
+        KeyX: ["x", "X"],
+        KeyC: ["c", "C"],
+        KeyV: ["v", "V"],
+        KeyB: ["b", "B"],
+        KeyN: ["n", "N"],
+        KeyM: ["m", "M"],
+        Comma: [",", "'"],
+        Period: [".", "."],
+        Slash: ["é", "É"],
+    },
+    bepo: {
+        Backquote: ["$", "#"],
+        Digit1: ['"', "1"],
+        Digit2: ["«", "2"],
+        Digit3: ["»", "3"],
+        Digit4: ["(", "4"],
+        Digit5: [")", "5"],
+        Digit6: ["@", "6"],
+        Digit7: ["+", "7"],
+        Digit8: ["-", "8"],
+        Digit9: ["/", "9"],
+        Digit0: ["*", "0"],
+        Minus: ["=", "°"],
+        Equal: ["%", "`"],
+        KeyQ: ["b", "B"],
+        KeyW: ["é", "É"],
+        KeyE: ["p", "P"],
+        KeyR: ["o", "O"],
+        KeyT: ["è", "È"],
+        KeyU: ["v", "V"],
+        KeyI: ["d", "D"],
+        KeyO: ["l", "L"],
+        KeyP: ["j", "J"],
+        BracketLeft: ["z", "Z"],
+        BracketRight: ["w", "W"],
+        KeyA: ["a", "A"],
+        KeyS: ["u", "U"],
+        KeyD: ["i", "I"],
+        KeyF: ["e", "E"],
+        KeyG: [",", ";"],
+        KeyH: ["c", "C"],
+        KeyJ: ["t", "T"],
+        KeyK: ["s", "S"],
+        KeyL: ["r", "R"],
+        Semicolon: ["n", "N"],
+        Quote: ["m", "M"],
+        Backslash: ["ç", "Ç"],
+        IntlBackslash: ["ê", "Ê"],
+        KeyZ: ["à", "À"],
+        KeyX: ["y", "Y"],
+        KeyC: ["x", "X"],
+        KeyV: [".", ":"],
+        KeyB: ["k", "K"],
+        KeyN: ["'", "?"],
+        KeyM: ["q", "Q"],
+        Comma: ["g", "G"],
+        Period: ["h", "H"],
+        Slash: ["f", "F"],
+        KeyY: ["", "!"],
+    },
+}
 
 /** @hidden
  * Merges two objects and removes all keys with null values at all levels
